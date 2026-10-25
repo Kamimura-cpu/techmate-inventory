@@ -1,0 +1,894 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TechMate 在庫・古物台帳</title>
+<style>
+:root{
+  color-scheme: light;
+  --bg:#f4f4f1; --surface:#fcfcfb; --surface-2:#f0efec; --border:#dcdbd5;
+  --text:#0b0b0b; --text-2:#52514e; --muted:#7a7974;
+  --accent:#1c5cab; --accent-soft:#e6eefa;
+  --series-1:#2a78d6; --series-2:#eb6834;
+  --good:#0ca30c; --good-text:#006300; --warning:#fab219; --warning-text:#8a5a00;
+  --critical:#d03b3b; --critical-text:#b02a2a; --demo:#b02a2a;
+  --radius:12px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.65 -apple-system,BlinkMacSystemFont,"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic",sans-serif;-webkit-text-size-adjust:100%}
+button,input,select,textarea{font:inherit;color:inherit}
+h1,h2,h3{margin:0;line-height:1.35}
+h2{font-size:21px} h3{font-size:17px}
+.num{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.muted{color:var(--muted)} .small{font-size:13px}
+.hidden{display:none !important}
+.spacer{flex:1}
+code{background:var(--surface-2);padding:0 5px;border-radius:4px}
+
+header{position:sticky;top:0;z-index:20;background:var(--surface);border-bottom:1px solid var(--border)}
+.bar{display:flex;align-items:center;gap:10px;padding:10px 20px;flex-wrap:wrap}
+.brand{font-weight:700;font-size:17px}
+.badge{background:var(--demo);color:#fff;font-weight:700;font-size:12px;padding:2px 9px;border-radius:999px;letter-spacing:.05em}
+.badge.live{background:var(--good-text)}
+.who{color:var(--text-2);font-size:14px}
+nav{display:flex;gap:2px;padding:0 12px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+nav button{border:0;background:none;padding:12px 14px;border-bottom:3px solid transparent;cursor:pointer;color:var(--text-2);white-space:nowrap;font-size:15px}
+nav button[aria-selected="true"]{color:var(--accent);border-bottom-color:var(--accent);font-weight:700}
+.note-bar{font-size:13px;padding:6px 20px;border-bottom:1px solid var(--border)}
+.note-bar.demo{background:#fff4f0;color:#7a2e12}
+
+main{max-width:1240px;margin:0 auto;padding:20px}
+section.view{display:none} section.view.active{display:block}
+.view-head{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.view-head p{margin:4px 0 0;color:var(--text-2);font-size:14px}
+
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:16px}
+.grid{display:grid;gap:16px}
+.grid>*{min-width:0}
+.g4{grid-template-columns:repeat(4,minmax(0,1fr))} .g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media (max-width:960px){.g4{grid-template-columns:repeat(2,minmax(0,1fr))}.g2{grid-template-columns:1fr}}
+@media (max-width:520px){.g4{grid-template-columns:1fr} main{padding:14px}.bar{padding:10px 14px}}
+
+.tile .label{color:var(--text-2);font-size:14px}
+.tile .value{font-size:28px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:2px}
+.tile .sub{font-size:13px;color:var(--text-2);margin-top:2px}
+.big-msg{font-size:17px;line-height:1.8}
+.big-msg b{font-size:20px}
+
+.btn{border:1px solid var(--border);background:var(--surface);border-radius:10px;padding:9px 16px;cursor:pointer;min-height:42px}
+.btn:hover{background:var(--surface-2)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.next{background:#f1faf1;border:2px solid var(--good-text);color:var(--good-text);font-weight:700}
+.btn.next:hover{background:#e3f4e3}
+.btn.small{padding:4px 12px;font-size:14px;min-height:34px}
+.btn.wide{width:100%}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+
+.table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);-webkit-overflow-scrolling:touch}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:9px 10px;border-bottom:1px solid var(--border);vertical-align:top;text-align:left}
+th{background:var(--surface-2);font-weight:600;color:var(--text-2);white-space:nowrap;font-size:13px}
+tr.row-alert td{background:#fdf1f1}
+.ledger th,.ledger td{border:1px solid var(--border)}
+.ledger th.grp{text-align:center;background:#e9e8e3;color:var(--text)}
+.ledger{min-width:1650px}
+.ledger td{white-space:nowrap}
+.ledger td.wrap{white-space:normal;min-width:240px;max-width:300px}
+.ledger td.addr{white-space:normal;min-width:170px}
+
+.filters{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.filters label{font-size:14px;color:var(--text-2);display:flex;gap:6px;align-items:center}
+select,input[type=text],input[type=number],input[type=date],input[type=password],textarea{border:1px solid var(--border);border-radius:10px;padding:9px 12px;background:#fff;min-height:44px;font-size:16px}
+textarea{width:100%;min-height:70px}
+
+/* 状態:色の点+文字(色だけに頼らない) */
+.chip{display:inline-flex;align-items:center;gap:6px;padding:2px 10px;border-radius:999px;font-size:13px;white-space:nowrap;border:1px solid var(--border);background:var(--surface-2)}
+.chip::before{content:"";width:9px;height:9px;border-radius:50%;background:var(--dot,#999)}
+.st-検品待ち{--dot:#7a7974} .st-修理・整備中{--dot:#eda100} .st-出品中{--dot:#2a78d6}
+.st-売約済み{--dot:#4a3aa7} .st-入金済み{--dot:#0ca30c} .st-部品取り{--dot:#52514e}
+.flag{display:inline-flex;align-items:center;gap:4px;font-size:12px;padding:1px 8px;border-radius:6px;white-space:nowrap}
+.flag.warn{background:#fff3d6;color:var(--warning-text)} .flag.crit{background:#fbe4e4;color:var(--critical-text)}
+.flag.ok{background:#e3f4e3;color:var(--good-text)} .flag.info{background:var(--accent-soft);color:var(--accent)}
+.status-line{display:flex;align-items:center;gap:8px;font-weight:600}
+.status-line .ico{width:24px;height:24px;border-radius:50%;display:inline-grid;place-items:center;color:#fff;font-size:14px;flex:none}
+.ico.ok{background:var(--good)} .ico.warn{background:var(--warning);color:#3a2a00} .ico.crit{background:var(--critical)}
+
+/* 在庫:PCは表、スマホはカード */
+.stock-cards{display:none}
+@media (max-width:760px){ #stock-table-wrap{display:none} .stock-cards{display:grid;gap:12px} }
+.scard{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px}
+.scard.alert{border-color:#e9b4b4;background:#fffafa}
+.scard .top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.scard .model{font-weight:700;font-size:17px}
+.scard .meta{font-size:13px;color:var(--text-2);margin:4px 0 10px}
+.scard .btns{display:flex;gap:8px;flex-wrap:wrap}
+.scard .btns .btn{flex:1;white-space:nowrap;padding:9px 10px}
+
+/* グラフ */
+.chart{position:relative}
+.chart svg{display:block;width:100%;height:auto}
+.chart .axis text{fill:var(--text-2);font-size:12px}
+.chart .grid line{stroke:#e6e5e0}
+.legend{display:flex;gap:14px;font-size:13px;color:var(--text-2);margin:4px 0 6px;flex-wrap:wrap}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:12px;height:12px;border-radius:3px;display:inline-block}
+.legend i.line{height:3px;border-radius:2px}
+.legend i.dash{height:0;border-top:2px dashed var(--critical);width:16px;border-radius:0}
+.tip{position:absolute;pointer-events:none;background:#fff;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:13px;box-shadow:0 4px 14px rgba(0,0,0,.12);white-space:nowrap;display:none;z-index:5}
+
+/* モーダル */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:flex-start;justify-content:center;z-index:50;padding:30px 12px;overflow:auto}
+.modal-bg.open{display:flex}
+.modal{background:var(--surface);border-radius:14px;width:min(720px,100%);padding:20px;box-shadow:0 20px 50px rgba(0,0,0,.25)}
+.modal h3{margin-bottom:10px;font-size:19px}
+.step{font-weight:700;margin:14px 0 6px;color:var(--accent);font-size:15px}
+.form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 14px}
+.form .full{grid-column:1/-1}
+.form label{display:flex;flex-direction:column;gap:4px;font-size:14px;color:var(--text)}
+.form label .law{font-size:12px;color:var(--muted)}
+.form label input,.form label select{width:100%}
+@media (max-width:560px){.form{grid-template-columns:1fr}}
+.choice{display:flex;gap:8px;flex-wrap:wrap}
+.choice button{flex:1;min-width:110px}
+.choice button[aria-pressed="true"]{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:700}
+.actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;flex-wrap:wrap}
+.hist{font-size:13px;color:var(--text-2);margin:8px 0 0;padding-left:18px}
+.callout{border-left:4px solid var(--accent);background:var(--accent-soft);padding:10px 14px;border-radius:8px;font-size:15px}
+.callout.crit{border-color:var(--critical);background:#fbecec}
+.callout.ok{border-color:var(--good);background:#e9f6e9}
+.err{color:var(--critical-text);font-size:14px;margin-top:8px;min-height:1em}
+
+/* ログイン */
+.center{min-height:100vh;display:grid;place-items:center;padding:16px}
+.center .card{width:min(440px,100%);padding:28px}
+.center h1{font-size:22px;margin-bottom:4px}
+.center label{display:block;font-size:14px;color:var(--text-2);margin-top:12px}
+.center input{width:100%;margin-top:4px}
+.demo-accounts{margin-top:16px;font-size:14px;background:var(--surface-2);border-radius:10px;padding:12px}
+.demo-accounts .btn{margin-top:8px}
+
+/* 通知・読み込み中 */
+#toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#222;color:#fff;padding:10px 18px;border-radius:10px;font-size:14px;z-index:80;display:none;max-width:90vw}
+#toast.err{background:var(--critical-text)}
+#busy{position:fixed;inset:0;background:rgba(255,255,255,.55);z-index:70;display:none;place-items:center;font-weight:600}
+
+@media print{
+  body{background:#fff}
+  body.print-ledger header,body.print-ledger .note-bar,body.print-ledger .no-print,body.print-ledger section.view:not(#v-ledger){display:none !important}
+  body.print-ledger #v-ledger{display:block !important}
+  body.print-ledger .table-wrap{border:0;overflow:visible}
+  body.print-ledger table{font-size:9.5px}
+  body.print-ledger .ledger{min-width:0}
+  body.print-ledger .ledger td{white-space:normal}
+  .print-title{display:block !important}
+}
+.print-title{display:none;margin-bottom:8px}
+</style>
+</head>
+<body>
+
+<!-- 初回セットアップ(本番版で管理者がいないとき) -->
+<div id="setup" class="center hidden">
+  <div class="card">
+    <h1>はじめに管理者を登録</h1>
+    <p class="muted small">初回のみ。管理者は古物台帳・資金繰りを含む全機能を利用できます。</p>
+    <form id="setup-form">
+      <label>ログインID(半角英数字3〜20文字)<input type="text" id="su-id" autocomplete="username"></label>
+      <label>表示名<input type="text" id="su-name"></label>
+      <label>パスワード(8文字以上)<input type="password" id="su-pw" autocomplete="new-password"></label>
+      <div class="err" id="su-err"></div>
+      <button class="btn primary wide" type="submit">登録する</button>
+    </form>
+  </div>
+</div>
+
+<!-- ログイン -->
+<div id="login" class="center hidden">
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><h1>TechMate 在庫・古物台帳</h1></div>
+    <p class="muted small" style="margin:0" id="login-sub"></p>
+    <form id="login-form">
+      <label>ログインID<input type="text" id="login-id" autocomplete="username"></label>
+      <label>パスワード<input type="password" id="login-pw" autocomplete="current-password"></label>
+      <div class="err" id="login-err"></div>
+      <button class="btn primary wide" style="margin-top:6px" type="submit">ログイン</button>
+    </form>
+  </div>
+</div>
+
+<!-- アプリ本体 -->
+<div id="app" class="hidden">
+<header>
+  <div class="bar">
+    <span class="brand">TechMate 在庫・古物台帳</span>
+    <span class="spacer"></span>
+    <span class="who" id="who"></span>
+    <button class="btn small" id="btn-reset">データ初期化</button>
+    <button class="btn small" id="btn-logout">ログアウト</button>
+  </div>
+  <nav id="tabs" role="tablist"></nav>
+</header>
+
+<main>
+  <section class="view" id="v-home">
+    <div class="view-head"><div><h2>ホーム</h2><p>資金・在庫・今週の予定の概要</p></div></div>
+    <div class="card"><div class="big-msg" id="home-msg"></div></div>
+    <div class="grid g4" id="home-tiles"></div>
+    <div class="grid g2">
+      <div class="card"><h3>今週の予定</h3><div id="home-todo"></div></div>
+      <div class="card"><h3>最近の更新</h3><div id="home-log"></div></div>
+    </div>
+  </section>
+
+  <section class="view" id="v-stock">
+    <div class="view-head"><div><h2>在庫</h2><p>作業が完了したら緑のボタンで次のステータスへ進めます。更新者と日時は自動で記録されます。</p></div></div>
+    <div class="filters">
+      <label>状態 <select id="f-status"></select></label>
+      <label>販売先 <select id="f-channel"></select></label>
+      <label><input type="checkbox" id="f-stale"> 滞留在庫(60日以上)のみ</label>
+      <span class="spacer"></span><span class="muted small" id="stock-count"></span>
+    </div>
+    <div class="table-wrap" id="stock-table-wrap"><table id="stock-table"></table></div>
+    <div class="stock-cards" id="stock-cards"></div>
+  </section>
+
+  <section class="view" id="v-ledger">
+    <div class="print-title"><b>古物台帳(古物営業法施行規則 別記様式第15号に準拠)</b> TechMate 出力日:<span id="print-date"></span></div>
+    <div class="view-head no-print">
+      <div><h2>古物台帳</h2><p>古物営業法 第16条の記載事項を、別記様式第15号の並びで記録します。記録は削除できず、訂正時は履歴が残ります。保存期間は3年です。</p></div>
+      <span class="spacer"></span>
+      <button class="btn primary" id="btn-buy">＋ 買取登録</button>
+      <button class="btn" id="btn-print">印刷</button>
+      <button class="btn" id="btn-csv">CSV出力</button>
+    </div>
+    <div class="table-wrap"><table class="ledger" id="ledger-table"></table></div>
+    <p class="muted small no-print">※ 対価1万円未満のスマホ・PCは本人確認・記録義務の対象外です(施行規則16条)。本システムでは記録したうえで「記録任意」と表示します。払出し(売却)の記録も、スマホ・PCは任意です。</p>
+  </section>
+
+  <section class="view" id="v-cash">
+    <div class="view-head"><div><h2>資金繰り</h2><p>今後60日間の支払予定と入金予定から、口座残高の推移を予測します。</p></div></div>
+    <div class="card"><div class="big-msg" id="cash-msg"></div></div>
+    <div class="grid g2">
+      <div class="card">
+        <h3>仕入れ前チェック</h3>
+        <p class="small muted" style="margin:4px 0 10px">支払日時点の残高と、今後60日間の最低残高を確認します。</p>
+        <div class="form">
+          <label>仕入れ金額(円)<input type="number" id="chk-amount" min="0" step="1000" value="250000" inputmode="numeric"></label>
+          <label>支払日<input type="date" id="chk-date"></label>
+        </div>
+        <div class="actions" style="justify-content:flex-start"><button class="btn primary" id="btn-check">チェックする</button></div>
+        <div id="chk-result" style="margin-top:10px"></div>
+      </div>
+      <div class="card">
+        <h3>残高・安全ライン</h3>
+        <div class="form" style="margin-top:8px">
+          <label>口座残高(円)<input type="number" id="set-balance" step="1000" inputmode="numeric"></label>
+          <label>安全ライン(円)<input type="number" id="set-safety" step="10000" inputmode="numeric"></label>
+        </div>
+        <div class="actions" style="justify-content:flex-start"><button class="btn" id="btn-save-settings">保存</button></div>
+        <p class="small muted">安全ライン:急な部品代や返品に備えて最低限確保しておく残高。</p>
+      </div>
+    </div>
+    <div class="card">
+      <h3>残高推移の予測(60日)</h3>
+      <div class="legend"><span><i class="line" style="background:var(--series-1)"></i>予測残高</span><span><i class="dash"></i>安全ライン</span></div>
+      <div class="chart" id="cash-chart"></div>
+    </div>
+    <div class="grid g2">
+      <div class="card">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><h3>支払予定</h3><span class="spacer"></span><button class="btn small" id="btn-add-pay">＋ 追加</button></div>
+        <div class="table-wrap"><table id="pay-table"></table></div>
+      </div>
+      <div class="card">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><h3>入金予定</h3><span class="spacer"></span><button class="btn small" id="btn-add-rec">＋ 追加</button></div>
+        <div class="table-wrap"><table id="rec-table"></table></div>
+        <p class="small muted">在庫で販売登録したものは自動で反映されます。</p>
+      </div>
+    </div>
+    <div class="card">
+      <h3>日繰り表</h3>
+      <div class="table-wrap" style="max-height:360px;overflow:auto"><table id="daily-table"></table></div>
+    </div>
+  </section>
+
+  <section class="view" id="v-report">
+    <div class="view-head"><div><h2>売上・利益</h2><p>粗利 = 販売額 −(買取額+部品代)。販売日ベースで月次集計しています。</p></div></div>
+    <div class="grid g4" id="rep-tiles"></div>
+    <div class="card">
+      <h3>月次の売上・粗利</h3>
+      <div class="legend"><span><i style="background:var(--series-1)"></i>売上</span><span><i style="background:var(--series-2)"></i>粗利</span></div>
+      <div class="chart" id="month-chart"></div>
+      <div class="table-wrap" style="margin-top:12px"><table id="month-table"></table></div>
+    </div>
+    <div class="grid g2">
+      <div class="card"><h3>販売先別</h3><div class="table-wrap" style="margin-top:8px"><table id="channel-table"></table></div></div>
+      <div class="card"><h3>滞留在庫(60日以上)</h3><div class="table-wrap" style="margin-top:8px"><table id="stale-table"></table></div></div>
+    </div>
+  </section>
+
+  <section class="view" id="v-members">
+    <div class="view-head"><div><h2>メンバー</h2><p>メンバー権限は在庫画面のみ。古物台帳(個人情報)と資金関連の画面は管理者のみ閲覧できます。</p></div><span class="spacer"></span><button class="btn primary" id="btn-add-member">＋ メンバーを追加</button></div>
+    <div class="table-wrap"><table id="member-table"></table></div>
+    <p class="small muted" id="member-note"></p>
+  </section>
+</main>
+</div>
+
+<div class="modal-bg" id="modal-bg"><div class="modal" id="modal"></div></div>
+<div id="toast"></div>
+<div id="busy">保存しています…</div>
+
+<script>
+/*__LOGIC__*/
+</script>
+<script>
+"use strict";
+/* ================= 動作モード ================= */
+const IS_GAS = typeof google !== "undefined" && google.script && google.script.run;
+const STORE_KEY = "techmate-demo-v2";
+const DAYS_AHEAD = 60, STALE_DAYS = 60;
+
+const $ = (s, el=document) => el.querySelector(s);
+const $$ = (s, el=document) => [...el.querySelectorAll(s)];
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const yen = n => (n < 0 ? "-" : "") + "¥" + Math.abs(Math.round(n)).toLocaleString("ja-JP");
+const man = n => (Math.round(n / 1000) / 10).toLocaleString("ja-JP") + "万円";
+const todayIso = () => isoDate(new Date());
+const jp = s => s ? String(s).replaceAll("-","/") : "";
+const md = s => { const d = parseDate(s); return `${d.getMonth()+1}/${d.getDate()}`; };
+function localCtx(){ const d = new Date(); return { today:isoDate(d), stamp:isoDate(d) + " " + d.toTimeString().slice(0,5) }; }
+
+function toast(msg, isErr){ const t = $("#toast"); t.textContent = msg; t.className = isErr ? "err" : ""; t.style.display = "block"; clearTimeout(toast.t); toast.t = setTimeout(() => t.style.display = "none", isErr ? 5000 : 2500); }
+function busy(on){ $("#busy").style.display = on ? "grid" : "none"; }
+
+/* ================= お試しデータ(開いた日を基準に作る) ================= */
+let seed = 7;
+function rnd(){ seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }
+function pick(a){ return a[Math.floor(rnd() * a.length)]; }
+const DEMO_MEMBERS = [
+  { id:"kamimura", pw:"demo1234", name:"上村(管理者)", role:"admin", active:true },
+  { id:"staff",    pw:"demo1234", name:"メンバーA", role:"member", active:true },
+];
+function buildDemo(){
+  seed = 7;
+  const t = todayIso(), ago = n => addDaysIso(t, -n);
+  const PEOPLE = [
+    { name:"佐藤 健太", job:"会社員", age:34, addr:"長野県上田市常田1-2-3" },
+    { name:"高橋 翔", job:"学生", age:21, addr:"長野県上田市下之郷4-5" },
+    { name:"小林 誠一", job:"自営業", age:52, addr:"長野県東御市本海野6-7-8" },
+    { name:"中村 美咲", job:"会社員", age:28, addr:"長野県上田市材木町9-1" },
+    { name:"渡辺 隆", job:"無職", age:67, addr:"長野県小諸市大手2-3-4" },
+    { name:"伊藤 さくら", job:"学生", age:19, addr:"長野県上田市中央5-6" },
+    { name:"山本 剛", job:"公務員", age:40, addr:"長野県坂城町坂城7-8" },
+    { name:"加藤 由美", job:"パート", age:45, addr:"長野県上田市秋和3-2-1" },
+  ];
+  const MODELS = [
+    ["スマートフォン","Apple iPhone 13","128GB",32000,45000],["スマートフォン","Apple iPhone 12","64GB",19000,29000],
+    ["スマートフォン","Apple iPhone SE(第2世代)","64GB",8000,14000],["スマートフォン","Apple iPhone 14 Pro","256GB",68000,89000],
+    ["スマートフォン","Apple iPhone 11","64GB",12000,19500],["スマートフォン","Google Pixel 7","128GB",18000,27000],
+    ["スマートフォン","Samsung Galaxy S22","256GB",21000,31000],["タブレット","Apple iPad(第9世代)","64GB",22000,31500],
+    ["ノートパソコン","Apple MacBook Air(M1, 2020)","256GB SSD",52000,74000],["ノートパソコン","Lenovo ThinkPad X1 Carbon Gen9","512GB SSD",38000,56000],
+  ];
+  const plan = [
+    [150,"入金済み","輸出業者",120],[140,"入金済み","自社サイト",118],[135,"入金済み","フリマアプリ",110],[128,"入金済み","輸出業者",95],
+    [120,"入金済み","自社サイト",100],[112,"入金済み","フリマアプリ",90],[104,"入金済み","輸出業者",70],[96,"出品中","フリマアプリ",null],
+    [90,"入金済み","自社サイト",66],[84,"入金済み","輸出業者",52],[78,"出品中","自社サイト",null],[72,"入金済み","フリマアプリ",40],
+    [64,"入金済み","輸出業者",30],[58,"入金済み","自社サイト",33],[50,"売約済み","輸出業者",9],[44,"入金済み","フリマアプリ",14],
+    [38,"売約済み","輸出業者",6],[33,"出品中","フリマアプリ",null],[27,"売約済み","輸出業者",3],[22,"出品中","自社サイト",null],
+    [17,"部品取り",null,null],[12,"修理・整備中",null,null],[8,"修理・整備中",null,null],[5,"検品待ち",null,null],[2,"検品待ち",null,null],
+  ];
+  const ledger = [], items = [];
+  plan.forEach(([a, status, channel, soldAgo], i) => {
+    const [type, model, storage, baseCost, basePrice] = MODELS[i % MODELS.length];
+    const date = ago(a), no = `K-${date.slice(0,4)}-${String(i+1).padStart(4,"0")}`, person = PEOPLE[i % PEOPLE.length];
+    const cost = Math.max(3000, baseCost + Math.round((rnd()*0.2 - 0.1) * baseCost / 500) * 500);
+    const color = pick(["ブラック","ホワイト","ブルー","シルバー","グリーン"]), grade = pick(["S","A","A","B","B","C"]);
+    const tail = String(Math.floor(rnd()*9000)+1000), serial = (type === "ノートパソコン" ? "S/N ****" : "IMEI ****") + tail;
+    const check = i % 7 === 3 ? { kubun:CHECK_KUBUN[2], method:"本人限定受取郵便" } : { kubun:CHECK_KUBUN[0], method: i % 3 === 0 ? "マイナンバーカード" : "運転免許証" };
+    ledger.push({ no, date, kubun:"買受け", hinmoku:type, qty:1, tokucho:`${model} ${storage} ${color} / ${serial} / 外装${grade}ランク`, price:cost,
+      partner:{ ...person }, check, out:null, corrections:[], by:"上村(管理者)", createdAt:`${date} 15:20` });
+    const it = { id:no, ledgerNo:no, type, model, storage, color, grade, cost, partsCost: status === "検品待ち" ? 0 : pick([0,0,2500,4000,6500,8000]),
+      status, channel:channel || "", listPrice:Math.round(basePrice/100)*100, soldPrice:null, soldDate:"", payDue:"", memo:"", history:[] };
+    const h = (d, by, from, to, note) => it.history.push({ at:d, by, from, to, note });
+    h(`${date} 15:20`, "上村(管理者)", "", "検品待ち", "買取登録");
+    if (status !== "検品待ち") h(`${addDaysIso(date,1)} 18:05`, "上村(管理者)", "検品待ち", "修理・整備中", "");
+    if (["出品中","売約済み","入金済み"].includes(status)) h(`${addDaysIso(date,3)} 20:40`, "メンバーA", "修理・整備中", "出品中", "撮影・出品");
+    if (status === "部品取り"){ h(`${addDaysIso(date,2)} 19:10`, "上村(管理者)", "修理・整備中", "部品取り", "基板故障のため部品取り。画面・バッテリーを部品在庫へ"); it.memo = "基板故障のため部品取り。画面・バッテリーは再利用。"; }
+    if (soldAgo !== null){
+      const sd = ago(soldAgo);
+      it.soldPrice = Math.round(it.listPrice * (channel === "輸出業者" ? 0.92 : 1) / 100) * 100; it.soldDate = sd;
+      it.payDue = addDaysIso(sd, channel === "輸出業者" ? 21 : channel === "フリマアプリ" ? 4 : 1);
+      h(`${sd} 21:15`, "メンバーA", "出品中", "売約済み", `${channel}で販売`);
+      if (status === "入金済み") h(`${it.payDue} 10:00`, "上村(管理者)", "売約済み", "入金済み", "入金確認");
+      ledger[ledger.length-1].out = { date:sd, kubun:"売却", price:it.soldPrice, partnerType:channel };
+    }
+    items.push(it);
+  });
+  ledger[5].corrections.push({ at:`${ago(110)} 09:12`, by:"上村(管理者)", field:"特徴", before:ledger[5].tokucho.replace("ランク","ランク(色誤記)"), after:ledger[5].tokucho, reason:"色の誤記を訂正" });
+  const d = n => addDaysIso(t, n);
+  return { settings:{ balance:650000, safety:300000 }, ledger, items,
+    payables:[
+      { id:"P1", due:d(4),  to:"中古端末卸 A社", desc:"まとめ仕入れ 12台", amount:186000, done:false },
+      { id:"P2", due:d(9),  to:"部品商 B商会", desc:"画面・バッテリー部品", amount:42000, done:false },
+      { id:"P3", due:d(16), to:"運送 C社", desc:"輸出向けの送料", amount:18500, done:false },
+      { id:"P4", due:d(25), to:"中古端末卸 A社", desc:"まとめ仕入れ 8台", amount:138000, done:false },
+      { id:"P5", due:d(31), to:"印刷 E社", desc:"チラシ・ポスター印刷", amount:12000, done:false },
+      { id:"P6", due:d(44), to:"部品商 B商会", desc:"部品の定期発注", amount:36000, done:false },
+      { id:"P0", due:d(-6), to:"部品商 B商会", desc:"部品代", amount:28000, done:true },
+    ],
+    receivables:[
+      { id:"R1", due:d(28), from:"輸出業者 D社", desc:"型落ち端末 10台 まとめ売り", amount:152000, done:false },
+      { id:"R2", due:d(52), from:"輸出業者 D社", desc:"型落ち端末 6台 まとめ売り", amount:88000, done:false },
+    ], log:[] };
+}
+
+/* ================= データの出し入れ(デモ:ブラウザ / 本番:Google) ================= */
+let ME = null, TOKEN = null, S = null, DEMO_STATE = null;
+function gas(fn, ...args){ return new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(e => rej(new Error(e && e.message ? e.message : String(e))))[fn](...args)); }
+const Backend = IS_GAS ? {
+  async setupStatus(){ return gas("setupStatus"); },
+  async createAdmin(id, name, pw){ return gas("createAdmin", id, name, pw); },
+  async login(id, pw){ const r = await gas("login", id, pw); TOKEN = r.token; try { sessionStorage.setItem("tm-token", r.token); sessionStorage.setItem("tm-me", JSON.stringify(r.me)); } catch(e){} return r.me; },
+  async logout(){ try { await gas("logout", TOKEN); } catch(e){} TOKEN = null; try { sessionStorage.removeItem("tm-token"); sessionStorage.removeItem("tm-me"); } catch(e){} },
+  async getAll(){ return JSON.parse(await gas("getAll", TOKEN)); },
+  async act(name, p){ return JSON.parse(await gas("act", TOKEN, name, p)); },
+  async members(name, p){ return gas("members", TOKEN, name, p); },
+} : {
+  async setupStatus(){ return { needsAdmin:false }; },
+  async login(id, pw){ const m = DEMO_MEMBERS.find(x => x.id === id && x.pw === pw); if (!m) throw new Error("IDまたはパスワードが違います"); try { sessionStorage.setItem("tm-demo-me", m.id); } catch(e){} return { id:m.id, name:m.name, role:m.role }; },
+  async logout(){ try { sessionStorage.removeItem("tm-demo-me"); } catch(e){} },
+  async getAll(){ return JSON.parse(JSON.stringify(viewFor(DEMO_STATE, ME))); },
+  async act(name, p){ const err = applyAction(DEMO_STATE, ME, name, JSON.parse(JSON.stringify(p || {})), localCtx()); if (err) throw new Error(err); saveDemo(); return this.getAll(); },
+  async members(){ return DEMO_MEMBERS.map(m => ({ id:m.id, name:m.name, role:m.role, active:m.active })); },
+};
+function loadDemo(){ try { const raw = localStorage.getItem(STORE_KEY); if (raw){ DEMO_STATE = JSON.parse(raw); return; } } catch(e){} DEMO_STATE = buildDemo(); }
+function saveDemo(){ try { localStorage.setItem(STORE_KEY, JSON.stringify(DEMO_STATE)); } catch(e){} }
+
+async function run(name, p, okMsg){
+  busy(true);
+  try { S = await Backend.act(name, p); renderAll(); if (okMsg) toast(okMsg); return true; }
+  catch(e){ toast(e.message, true); if (/有効期限/.test(e.message)) showLogin(); return false; }
+  finally { busy(false); }
+}
+
+/* ================= 画面の切り替え ================= */
+function showOnly(id){ ["setup","login","app"].forEach(x => $("#" + x).classList.toggle("hidden", x !== id)); }
+function showLogin(){
+  showOnly("login");
+  $("#login-sub").textContent = "IDとパスワードを入力してください";
+}
+async function enter(me){
+  ME = me; busy(true);
+  try { S = await Backend.getAll(); } catch(e){ busy(false); toast(e.message, true); return showLogin(); }
+  busy(false);
+  showOnly("app");
+  $("#who").textContent = me.name;
+  $("#btn-reset").classList.toggle("hidden", IS_GAS || me.role !== "admin");
+  buildTabs(); renderAll();
+}
+$("#login-form").addEventListener("submit", async e => {
+  e.preventDefault(); $("#login-err").textContent = ""; busy(true);
+  try { const me = await Backend.login($("#login-id").value.trim(), $("#login-pw").value); busy(false); $("#login-pw").value = ""; enter(me); }
+  catch(err){ busy(false); $("#login-err").textContent = err.message; }
+});
+$("#btn-logout").addEventListener("click", async () => { await Backend.logout(); ME = null; S = null; showLogin(); });
+$("#btn-reset").addEventListener("click", async () => {
+  if (!confirm("データを初期状態に戻します。よろしいですか？")) return;
+  DEMO_STATE = buildDemo(); saveDemo(); S = await Backend.getAll(); renderAll(); toast("初期化しました");
+});
+$("#setup-form").addEventListener("submit", async e => {
+  e.preventDefault(); $("#su-err").textContent = ""; busy(true);
+  try { await Backend.createAdmin($("#su-id").value.trim(), $("#su-name").value.trim(), $("#su-pw").value); busy(false); toast("登録しました。ログインしてください"); showLogin(); $("#login-id").value = $("#su-id").value.trim(); }
+  catch(err){ busy(false); $("#su-err").textContent = err.message; }
+});
+
+const TABS = [
+  { id:"home", label:"ホーム", admin:true }, { id:"stock", label:"在庫", admin:false }, { id:"ledger", label:"古物台帳", admin:true },
+  { id:"cash", label:"資金繰り", admin:true }, { id:"report", label:"売上・利益", admin:true }, { id:"members", label:"メンバー", admin:true },
+];
+let current = "home";
+function buildTabs(){
+  const tabs = TABS.filter(t => ME.role === "admin" || !t.admin);
+  if (!tabs.find(t => t.id === current)) current = tabs[0].id;
+  $("#tabs").innerHTML = tabs.map(t => `<button role="tab" data-tab="${t.id}" aria-selected="${t.id===current}">${t.label}</button>`).join("");
+  $$("#tabs button").forEach(b => b.addEventListener("click", () => { current = b.dataset.tab; buildTabs(); if (current === "members") renderMembers(); }));
+  $$("section.view").forEach(v => v.classList.toggle("active", v.id === "v-" + current));
+}
+
+/* ================= 計算 ================= */
+const isAdmin = () => ME && ME.role === "admin";
+const costOf = i => (i.cost || 0) + (i.partsCost || 0);
+const boughtOn = i => (i.history[0]?.at || todayIso()).slice(0,10);
+const ageOf = i => daysBetween(boughtOn(i), todayIso());
+const isStale = i => ACTIVE_STATUSES.includes(i.status) && ageOf(i) >= STALE_DAYS;
+const soldItems = () => S.items.filter(i => SOLD_STATUSES.includes(i.status) && i.soldDate);
+const stockItems = () => S.items.filter(i => ACTIVE_STATUSES.includes(i.status));
+function receivableList(){
+  return S.items.filter(i => i.status === "売約済み" && i.payDue).map(i => ({ id:"item:" + i.id, due:i.payDue, from:i.channel, desc:`${i.model}(${i.ledgerNo})`, amount:i.soldPrice || 0, done:false, auto:true }))
+    .concat(S.receivables);
+}
+function projection(extra){
+  const T = todayIso(), rows = []; let bal = S.settings.balance;
+  const ins = receivableList().filter(r => !r.done), outs = S.payables.filter(p => !p.done).slice();
+  if (extra) outs.push({ due:extra.date, amount:extra.amount, to:"(仮)仕入れ" });
+  for (let k = 0; k <= DAYS_AHEAD; k++){
+    const day = addDaysIso(T, k);
+    const inT = ins.filter(r => k === 0 ? r.due <= day : r.due === day), outT = outs.filter(p => k === 0 ? p.due <= day : p.due === day);
+    const inSum = inT.reduce((a, r) => a + Number(r.amount), 0), outSum = outT.reduce((a, p) => a + Number(p.amount), 0);
+    bal += inSum - outSum; rows.push({ day, inSum, outSum, bal, inT, outT });
+  }
+  return rows;
+}
+const minOf = rows => rows.reduce((m, r) => r.bal < m.bal ? r : m, rows[0]);
+function statusLine(level, text){ return `<div class="status-line"><span class="ico ${level}" aria-hidden="true">${{ok:"✓",warn:"!",crit:"×"}[level]}</span><span>${text}</span></div>`; }
+function levelOf(bal){ const s = S.settings.safety; return bal < s ? "crit" : bal < s * 1.2 ? "warn" : "ok"; }
+
+/* ================= ホーム ================= */
+function renderHome(){
+  const rows = projection(), low = minOf(rows), lv = levelOf(low.bal);
+  const st = stockItems(), ym = todayIso().slice(0,7), month = soldItems().filter(i => i.soldDate.startsWith(ym));
+  const gross = month.reduce((a, i) => a + i.soldPrice - costOf(i), 0);
+  $("#home-msg").innerHTML = statusLine(lv, lv === "ok" ? "資金繰りに問題はありません" : lv === "warn" ? "残高が安全ラインに近づく日があります" : "残高が安全ラインを下回る日があります")
+    + `<div style="margin-top:6px">今後60日間の最低残高は <b>${jp(low.day)}</b> の <b>${yen(low.bal)}</b> の見込みです(安全ライン ${yen(S.settings.safety)})。</div>`;
+  $("#home-tiles").innerHTML = [
+    `<div class="card tile"><div class="label">口座残高</div><div class="value">${yen(S.settings.balance)}</div></div>`,
+    `<div class="card tile"><div class="label">在庫金額(原価)</div><div class="value">${yen(st.reduce((a,i)=>a+costOf(i),0))}</div><div class="sub">${st.length}台(うち滞留 ${st.filter(isStale).length}台)</div></div>`,
+    `<div class="card tile"><div class="label">今月の粗利</div><div class="value">${yen(gross)}</div><div class="sub">販売 ${month.length}台</div></div>`,
+    `<div class="card tile"><div class="label">検品待ち</div><div class="value">${S.items.filter(i=>i.status==="検品待ち").length}台</div></div>`,
+  ].join("");
+  const wk = addDaysIso(todayIso(), 7), todo = [];
+  S.payables.filter(p => !p.done && p.due <= wk).forEach(p => todo.push(`<li><span class="flag crit">支払</span> ${md(p.due)} ${esc(p.to)} ${yen(p.amount)}</li>`));
+  receivableList().filter(r => !r.done && r.due <= wk).forEach(r => todo.push(`<li><span class="flag ok">入金</span> ${md(r.due)} ${esc(r.from)} ${yen(r.amount)}</li>`));
+  const stale = st.filter(isStale);
+  if (stale.length) todo.push(`<li><span class="flag warn">滞留</span> 60日以上の在庫が ${stale.length}台(値下げ・輸出を検討)</li>`);
+  $("#home-todo").innerHTML = todo.length ? `<ul style="margin:8px 0 0;padding-left:18px;line-height:2.1">${todo.join("")}</ul>` : `<p class="muted">今週の予定はありません</p>`;
+  const hist = S.log.slice(0, 8).map(l => ({ at:l.at, by:l.by, text:l.text }));
+  S.items.forEach(i => i.history.forEach(h => hist.push({ at:h.at, by:h.by, text:`${i.model} → ${h.to}` })));
+  hist.sort((a, b) => b.at.localeCompare(a.at));
+  $("#home-log").innerHTML = hist.length ? `<ul style="margin:8px 0 0;padding-left:18px">${hist.slice(0, 7).map(h => `<li class="small"><span class="muted">${esc(h.at.slice(5))}</span> ${esc(h.by)}:${esc(h.text)}</li>`).join("")}</ul>` : `<p class="muted">更新履歴はありません</p>`;
+}
+
+/* ================= 在庫 ================= */
+$("#f-status").innerHTML = `<option value="">すべて</option>` + STATUSES.map(s => `<option>${s}</option>`).join("");
+$("#f-channel").innerHTML = `<option value="">すべて</option>` + CHANNELS.map(s => `<option>${s}</option>`).join("");
+["#f-status","#f-channel","#f-stale"].forEach(s => $(s).addEventListener("change", renderStock));
+function nextBtn(i, cls){
+  const ns = NEXT_STEP[i.status];
+  if (!ns || (ns.admin && !isAdmin())) return "";
+  return `<button class="btn next ${cls||""}" data-next="${esc(i.id)}">✓ ${ns.label}</button>`;
+}
+function renderStock(){
+  const fs = $("#f-status").value, fc = $("#f-channel").value, stale = $("#f-stale").checked;
+  let list = S.items.slice().sort((a, b) => STATUSES.indexOf(a.status) - STATUSES.indexOf(b.status) || b.ledgerNo.localeCompare(a.ledgerNo));
+  if (fs) list = list.filter(i => i.status === fs); if (fc) list = list.filter(i => i.channel === fc); if (stale) list = list.filter(isStale);
+  $("#stock-count").textContent = `${list.length}台`;
+  const price = i => i.soldPrice ? yen(i.soldPrice) : i.listPrice ? `<span class="muted">${yen(i.listPrice)}(予定)</span>` : `<span class="muted">-</span>`;
+  const age = i => ACTIVE_STATUSES.includes(i.status) ? `${ageOf(i)}日${isStale(i) ? ' <span class="flag warn">滞留</span>' : ""}` : `<span class="muted">-</span>`;
+  $("#stock-table").innerHTML = `<thead><tr><th>台帳番号</th><th>機種</th><th>容量・色</th><th>ランク</th><th>状態</th><th>販売先</th>${isAdmin()?'<th class="num">原価</th>':""}<th class="num">価格</th><th class="num">在庫日数</th><th>最終更新</th><th></th></tr></thead><tbody>` +
+    list.map(i => { const last = i.history[i.history.length-1] || {};
+      return `<tr class="${isStale(i)?"row-alert":""}"><td>${esc(i.ledgerNo)}</td><td>${esc(i.model)}</td><td>${esc(i.storage)} / ${esc(i.color)}</td><td>${esc(i.grade)}</td>
+      <td><span class="chip st-${esc(i.status)}">${esc(i.status)}</span></td><td>${esc(i.channel) || '<span class="muted">-</span>'}</td>
+      ${isAdmin()?`<td class="num">${yen(costOf(i))}</td>`:""}<td class="num">${price(i)}</td><td class="num">${age(i)}</td>
+      <td class="small"><span class="muted">${esc((last.at||"").slice(5))}</span><br>${esc(last.by||"")}</td>
+      <td style="white-space:nowrap">${nextBtn(i, "small")} <button class="btn small" data-edit="${esc(i.id)}">詳細・編集</button></td></tr>`; }).join("") + `</tbody>`;
+  $("#stock-cards").innerHTML = list.map(i => { const last = i.history[i.history.length-1] || {};
+    return `<div class="scard ${isStale(i)?"alert":""}"><div class="top"><div><div class="model">${esc(i.model)}</div><div class="small muted">${esc(i.ledgerNo)}</div></div><span class="chip st-${esc(i.status)}">${esc(i.status)}</span></div>
+      <div class="meta">${esc(i.storage)} / ${esc(i.color)} / ランク${esc(i.grade)} ・ ${price(i)} ・ 在庫 ${age(i)}<br>最終更新:${esc((last.at||"").slice(5))} ${esc(last.by||"")}</div>
+      <div class="btns">${nextBtn(i)}<button class="btn" data-edit="${esc(i.id)}">詳細・編集</button></div></div>`; }).join("") || `<p class="muted">該当する在庫はありません</p>`;
+  $$("[data-edit]").forEach(b => b.addEventListener("click", () => openItem(b.dataset.edit)));
+  $$("[data-next]").forEach(b => b.addEventListener("click", () => doNext(b.dataset.next)));
+}
+function doNext(id){
+  const i = S.items.find(x => x.id === id), ns = NEXT_STEP[i.status];
+  if (ns.to === "売約済み") return openSold(i);
+  if (ns.to === "入金済み" && !confirm(`${i.model} の入金(${yen(i.soldPrice)})を確認済みにします。口座残高に加算されます。よろしいですか？`)) return;
+  run("nextStep", { id }, `「${ns.to}」に更新しました`);
+}
+function openSold(i){
+  const lag = { "輸出業者":21, "フリマアプリ":4, "自社サイト":1 };
+  let ch = i.channel || "";
+  openModal(`<h3>販売登録:${esc(i.model)}</h3>
+    <div class="step">販売先</div>
+    <div class="choice" id="s-ch">${CHANNELS.map(c => `<button class="btn" type="button" data-ch="${c}" aria-pressed="${c===ch}">${c}</button>`).join("")}</div>
+    <div class="form" style="margin-top:12px">
+      <label>販売額(円)<input type="number" id="s-price" value="${i.soldPrice || i.listPrice || ""}" step="100" inputmode="numeric"></label>
+      <label>入金予定日<input type="date" id="s-due" value="${i.payDue || (ch ? addDaysIso(todayIso(), lag[ch]) : "")}"></label>
+    </div>
+    <p class="small muted">販売先を選ぶと入金予定日の目安が自動入力されます(輸出業者 21日後/フリマ 4日後/自社サイト 1日後)。</p>
+    <div class="err" id="s-err"></div>
+    <div class="actions"><button class="btn" data-close>キャンセル</button><button class="btn primary" id="s-save">登録</button></div>`);
+  $$("#s-ch [data-ch]").forEach(b => b.addEventListener("click", () => { ch = b.dataset.ch; $$("#s-ch [data-ch]").forEach(x => x.setAttribute("aria-pressed", x === b)); $("#s-due").value = addDaysIso(todayIso(), lag[ch]); }));
+  $("#s-save").addEventListener("click", async () => {
+    if (!ch){ $("#s-err").textContent = "販売先を選択してください"; return; }
+    if (await run("updateItem", { id:i.id, status:"売約済み", channel:ch, soldPrice:$("#s-price").value, payDue:$("#s-due").value, note:`${ch}で販売` }, "販売登録しました")) closeModal();
+  });
+}
+function openItem(id){
+  const i = S.items.find(x => x.id === id);
+  openModal(`<h3>${esc(i.model)}(${esc(i.ledgerNo)})</h3>
+    <div class="form">
+      <label>状態<select id="m-status">${STATUSES.map(s => `<option ${s===i.status?"selected":""} ${s==="入金済み"&&!isAdmin()&&i.status!=="入金済み"?"disabled":""}>${s}</option>`).join("")}</select></label>
+      <label>販売先<select id="m-channel"><option value="">-</option>${CHANNELS.map(s => `<option ${s===i.channel?"selected":""}>${s}</option>`).join("")}</select></label>
+      <label>出品価格(円)<input type="number" id="m-list" value="${i.listPrice ?? ""}" step="100" inputmode="numeric"></label>
+      ${isAdmin()?`<label>部品代(円)<input type="number" id="m-parts" value="${i.partsCost ?? 0}" step="100" inputmode="numeric"></label>`:"<span></span>"}
+      <label>販売額(円)<input type="number" id="m-sold" value="${i.soldPrice ?? ""}" step="100" inputmode="numeric"></label>
+      <label>入金予定日<input type="date" id="m-due" value="${esc(i.payDue || "")}"></label>
+      <label class="full">メモ<textarea id="m-memo" placeholder="例:画面にうすいキズ。バッテリー最大容量 86%">${esc(i.memo)}</textarea></label>
+    </div>
+    <div class="err" id="m-err"></div>
+    <div class="step">更新履歴</div>
+    <ul class="hist">${i.history.slice().reverse().map(h => `<li>${esc(h.at)} ${esc(h.by)}:${h.from?esc(h.from)+" → ":""}${esc(h.to)}${h.note?"(" + esc(h.note) + ")":""}</li>`).join("")}</ul>
+    <div class="actions"><button class="btn" data-close>閉じる</button><button class="btn primary" id="m-save">保存</button></div>`);
+  $("#m-save").addEventListener("click", async () => {
+    const p = { id, status:$("#m-status").value, channel:$("#m-channel").value, listPrice:$("#m-list").value, soldPrice:$("#m-sold").value, payDue:$("#m-due").value, memo:$("#m-memo").value };
+    if (isAdmin()) p.partsCost = $("#m-parts").value;
+    if (await run("updateItem", p, "保存しました")) closeModal();
+  });
+}
+
+/* ================= 買取の記録(古物台帳) ================= */
+function renderLedger(){
+  const list = S.ledger.slice().sort((a, b) => b.no.localeCompare(a.no));
+  $("#ledger-table").innerHTML = `<thead>
+    <tr><th class="grp" colspan="7">受入れ</th><th class="grp" colspan="4">相手方</th><th class="grp" rowspan="2">確認の区分・方法</th><th class="grp" colspan="4">払出し(任意)</th><th class="grp no-print" rowspan="2">保存期限</th><th class="grp no-print" rowspan="2"></th></tr>
+    <tr><th>台帳番号</th><th>取引年月日</th><th>区別</th><th>品目</th><th class="num">数量</th><th>特徴</th><th class="num">代価</th><th>住所</th><th>氏名</th><th>職業</th><th class="num">年齢</th><th>年月日</th><th>区別</th><th class="num">代価</th><th>相手方</th></tr></thead><tbody>` +
+    (list.map(l => `<tr><td>${esc(l.no)}</td><td>${jp(l.date)}</td><td>${esc(l.kubun)}</td><td>${esc(l.hinmoku)}${l.price < 10000 ? '<br><span class="flag info">記録任意</span>' : ""}</td><td class="num">${l.qty}</td>
+      <td class="small wrap">${esc(l.tokucho)}${l.corrections.length?`<br><span class="flag warn">訂正 ${l.corrections.length}件</span>`:""}</td><td class="num">${yen(l.price)}</td>
+      <td class="small addr">${esc(l.partner.addr)}</td><td>${esc(l.partner.name)}</td><td>${esc(l.partner.job)}</td><td class="num">${l.partner.age}</td>
+      <td class="small">${esc(l.check.kubun)}<br>${esc(l.check.method)}</td>
+      <td>${l.out?jp(l.out.date):""}</td><td>${l.out?esc(l.out.kubun):""}</td><td class="num">${l.out&&l.out.price!=null?yen(l.out.price):""}</td><td>${l.out?esc(l.out.partnerType):""}</td>
+      <td class="no-print small">${jp(addDaysIso(l.date, 365*3+1))}</td><td class="no-print"><button class="btn small" data-fix="${esc(l.no)}">訂正</button></td></tr>`).join("")
+    || `<tr><td colspan="18" class="muted">記録はまだありません。「＋ 買取登録」から登録してください。</td></tr>`) + `</tbody>`;
+  $$("[data-fix]").forEach(b => b.addEventListener("click", () => openFix(b.dataset.fix)));
+}
+function openBuy(){
+  openModal(`<h3>買取登録</h3>
+    <p class="small muted" style="margin-top:0">古物台帳と在庫に同時に登録されます。</p>
+    <div class="step">① 商品</div>
+    <div class="form">
+      <label>取引年月日<input type="date" id="b-date" value="${todayIso()}"></label>
+      <label>区別<select id="b-kubun"><option value="買受け">買受け</option><option value="委託">委託</option></select></label>
+      <label>品目<select id="b-type"><option>スマートフォン</option><option>タブレット</option><option>ノートパソコン</option></select></label>
+      <label>メーカー・機種<input type="text" id="b-model" placeholder="例:Apple iPhone 13"></label>
+      <label>容量<input type="text" id="b-storage" placeholder="例:128GB"></label>
+      <label>色<input type="text" id="b-color" placeholder="例:ブルー"></label>
+      <label>シリアル/IMEI(下4桁)<input type="text" id="b-serial" placeholder="例:1234" inputmode="numeric"></label>
+      <label>外装ランク<select id="b-grade"><option value="S">S(新品同様)</option><option value="A" selected>A(美品)</option><option value="B">B(使用感あり)</option><option value="C">C(傷・汚れ大)</option></select></label>
+      <label class="full">代価(買取額・円)<input type="number" id="b-price" step="500" inputmode="numeric"></label>
+    </div>
+    <div class="step">② 相手方</div>
+    <div class="form">
+      <label class="full">住所<input type="text" id="b-addr" placeholder="本人確認書類の記載どおり"></label>
+      <label>氏名<input type="text" id="b-name"></label>
+      <label>職業<input type="text" id="b-job" placeholder="例:会社員、学生"></label>
+      <label>年齢<input type="number" id="b-age" min="0" inputmode="numeric"></label>
+    </div>
+    <div class="step">③ 本人確認</div>
+    <div class="form">
+      <label>確認の区分<select id="b-ck">${CHECK_KUBUN.map(s => `<option>${s}</option>`).join("")}</select></label>
+      <label>確認の方法<select id="b-cm">${CHECK_METHOD.map(s => `<option>${s}</option>`).join("")}</select></label>
+      <label class="full" style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" id="b-paid" checked style="width:auto;min-height:auto"> 現金で支払済み(口座残高から差し引く)</label>
+    </div>
+    <div id="b-hint" style="margin-top:10px"></div>
+    <div class="err" id="b-err"></div>
+    <div class="actions"><button class="btn" data-close>キャンセル</button><button class="btn primary" id="b-save">登録</button></div>`);
+  const hint = () => {
+    const p = Number($("#b-price").value) || 0;
+    if (!p){ $("#b-hint").innerHTML = ""; return; }
+    const low = minOf(projection($("#b-paid").checked ? { date:todayIso(), amount:p } : null)), ok = low.bal >= S.settings.safety;
+    $("#b-hint").innerHTML = `<div class="callout ${ok?"ok":"crit"}">${statusLine(ok?"ok":"crit", `登録後の60日間の最低残高:${yen(low.bal)}(${jp(low.day)})`)}${p<10000?'<div class="small" style="margin-top:4px">1万円未満のため記録は任意ですが、記録しておきます。</div>':""}</div>`;
+  };
+  $("#b-price").addEventListener("input", hint); $("#b-paid").addEventListener("change", hint);
+  $("#b-save").addEventListener("click", async () => {
+    const v = id => $(id).value.trim();
+    const p = { date:v("#b-date"), kubun:v("#b-kubun"), type:v("#b-type"), model:v("#b-model"), storage:v("#b-storage"), color:v("#b-color"), serial:v("#b-serial"), grade:v("#b-grade"),
+      price:v("#b-price"), addr:v("#b-addr"), name:v("#b-name"), job:v("#b-job"), age:v("#b-age"), ck:v("#b-ck"), cm:v("#b-cm"), paidNow:$("#b-paid").checked };
+    if (await run("buy", p, "登録しました(在庫にも追加)")) closeModal();
+  });
+}
+function openFix(no){
+  const l = S.ledger.find(x => x.no === no);
+  const getter = f => ({ "特徴":l.tokucho, "代価":l.price, "住所":l.partner.addr, "氏名":l.partner.name, "職業":l.partner.job, "年齢":l.partner.age })[f];
+  openModal(`<h3>台帳の訂正:${esc(no)}</h3>
+    <p class="small muted" style="margin-top:0">訂正前・訂正後・訂正者・日時・理由が履歴として残ります。</p>
+    <div class="form">
+      <label>訂正する項目<select id="x-field">${["特徴","代価","住所","氏名","職業","年齢"].map(k => `<option>${k}</option>`).join("")}</select></label>
+      <label>訂正後の内容<input type="text" id="x-after"></label>
+      <label class="full">訂正理由<input type="text" id="x-reason" placeholder="例:色の誤記"></label>
+    </div>
+    <div class="err" id="x-err"></div>
+    <div class="step">訂正履歴</div>
+    ${l.corrections.length ? `<ul class="hist">${l.corrections.map(c => `<li>${esc(c.at)} ${esc(c.by)}:【${esc(c.field)}】「${esc(c.before)}」→「${esc(c.after)}」(${esc(c.reason)})</li>`).join("")}</ul>` : `<p class="small muted">訂正履歴はありません</p>`}
+    <div class="actions"><button class="btn" data-close>閉じる</button><button class="btn primary" id="x-save">訂正</button></div>`);
+  const sync = () => { $("#x-after").value = getter($("#x-field").value); };
+  $("#x-field").addEventListener("change", sync); sync();
+  $("#x-save").addEventListener("click", async () => { if (await run("fixLedger", { no, field:$("#x-field").value, after:$("#x-after").value, reason:$("#x-reason").value }, "訂正しました")) closeModal(); });
+}
+$("#btn-buy").addEventListener("click", openBuy);
+$("#btn-print").addEventListener("click", () => { $("#print-date").textContent = jp(todayIso()); document.body.classList.add("print-ledger"); window.print(); setTimeout(() => document.body.classList.remove("print-ledger"), 500); });
+$("#btn-csv").addEventListener("click", () => {
+  const head = ["台帳番号","取引年月日","区別","品目","数量","特徴","代価","相手方住所","相手方氏名","職業","年齢","確認の区分","確認の方法","払出し年月日","払出し区別","払出し代価","払出し相手方","訂正件数"];
+  const q = s => `"${String(s ?? "").replaceAll('"','""')}"`;
+  const lines = [head.map(q).join(",")].concat(S.ledger.map(l => [l.no,l.date,l.kubun,l.hinmoku,l.qty,l.tokucho,l.price,l.partner.addr,l.partner.name,l.partner.job,l.partner.age,l.check.kubun,l.check.method,l.out?.date,l.out?.kubun,l.out?.price,l.out?.partnerType,l.corrections.length].map(q).join(",")));
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["﻿" + lines.join("\r\n")], { type:"text/csv" }));
+  a.download = `古物台帳_${todayIso()}.csv`; document.body.appendChild(a); a.click(); a.remove();
+});
+
+/* ================= お金の予定 ================= */
+function renderCash(){
+  $("#set-balance").value = S.settings.balance; $("#set-safety").value = S.settings.safety;
+  if (!$("#chk-date").value) $("#chk-date").value = addDaysIso(todayIso(), 10);
+  const rows = projection(), low = minOf(rows), lv = levelOf(low.bal), T = todayIso();
+  $("#cash-msg").innerHTML = statusLine(lv, lv === "ok" ? "今後60日間、残高は安全ラインを上回る見込みです" : lv === "warn" ? "残高が安全ラインに近づく日があります" : "残高が安全ラインを下回る日があります。仕入れ・支払時期の見直しを推奨します")
+    + `<div style="margin-top:6px">最低残高は <b>${jp(low.day)}</b> の <b>${yen(low.bal)}</b> の見込みです。</div>`;
+  lineChart($("#cash-chart"), rows, S.settings.safety);
+  $("#pay-table").innerHTML = `<thead><tr><th>期日</th><th>支払先・内容</th><th class="num">金額</th><th></th></tr></thead><tbody>` +
+    (S.payables.slice().sort((a, b) => a.due.localeCompare(b.due)).map(p => `<tr><td>${jp(p.due)}${!p.done && p.due < T ? ' <span class="flag crit">期限超過</span>':""}</td><td>${esc(p.to)}<br><span class="small muted">${esc(p.desc)}</span></td><td class="num">${yen(p.amount)}</td>
+      <td style="white-space:nowrap">${p.done ? '<span class="flag ok">✓ 支払済</span>' : `<button class="btn small next" data-paydone="${esc(p.id)}">支払済にする</button> <button class="btn small" data-rm="pay:${esc(p.id)}">取消</button>`}</td></tr>`).join("") || `<tr><td colspan="4" class="muted">予定はありません</td></tr>`) + `</tbody>`;
+  $("#rec-table").innerHTML = `<thead><tr><th>予定日</th><th>入金元・内容</th><th class="num">金額</th><th></th></tr></thead><tbody>` +
+    (receivableList().sort((a, b) => a.due.localeCompare(b.due)).map(r => `<tr><td>${jp(r.due)}</td><td>${esc(r.from)}${r.auto?' <span class="flag info">在庫から自動</span>':""}<br><span class="small muted">${esc(r.desc)}</span></td><td class="num">${yen(r.amount)}</td>
+      <td style="white-space:nowrap">${r.done ? '<span class="flag ok">✓ 入金済</span>' : `<button class="btn small next" data-recdone="${esc(r.id)}">入金済にする</button>${r.auto ? "" : ` <button class="btn small" data-rm="rec:${esc(r.id)}">取消</button>`}`}</td></tr>`).join("") || `<tr><td colspan="4" class="muted">予定はありません</td></tr>`) + `</tbody>`;
+  $$("[data-paydone]").forEach(b => b.addEventListener("click", () => run("payDone", { id:b.dataset.paydone }, "支払済にしました")));
+  $$("[data-recdone]").forEach(b => b.addEventListener("click", () => run("recDone", { id:b.dataset.recdone }, "入金済にしました")));
+  $$("[data-rm]").forEach(b => b.addEventListener("click", () => { const [kind, id] = b.dataset.rm.split(":"); if (confirm("この予定を取り消しますか？")) run("removeMoney", { kind, id }, "取り消しました"); }));
+  $("#daily-table").innerHTML = `<thead><tr><th>日付</th><th class="num">入金</th><th class="num">支払</th><th class="num">残高見込み</th><th>内訳</th></tr></thead><tbody>` +
+    rows.filter((r, k) => k === 0 || r.inSum || r.outSum).map(r => `<tr class="${r.bal < S.settings.safety ? "row-alert" : ""}"><td>${jp(r.day)}${r.day===T?"(今日)":""}</td>
+      <td class="num">${r.inSum ? yen(r.inSum) : ""}</td><td class="num">${r.outSum ? yen(r.outSum) : ""}</td>
+      <td class="num"><b>${yen(r.bal)}</b>${r.bal < S.settings.safety ? ' <span class="flag crit">× 安全ライン割れ</span>' : ""}</td>
+      <td class="small muted">${[...r.inT.map(x => "＋" + esc(x.from)), ...r.outT.map(x => "－" + esc(x.to))].join("、")}</td></tr>`).join("") + `</tbody>`;
+}
+$("#btn-save-settings").addEventListener("click", () => run("saveSettings", { balance:$("#set-balance").value, safety:$("#set-safety").value }, "保存しました"));
+$("#btn-check").addEventListener("click", () => {
+  const amount = Number($("#chk-amount").value) || 0, date = $("#chk-date").value;
+  if (!amount || !date){ $("#chk-result").innerHTML = `<div class="err">金額と支払日を入力してください</div>`; return; }
+  const base = minOf(projection()), after = projection({ date, amount }), low = minOf(after), safety = S.settings.safety;
+  const onDay = after.find(r => r.day === date) || after[after.length-1], ok = low.bal >= safety;
+  const room = Math.max(0, amount - (safety - low.bal));
+  $("#chk-result").innerHTML = `<div class="callout ${ok?"ok":"crit"}">${statusLine(ok?"ok":"crit", ok ? "仕入れ可能:安全ラインを維持できます" : "見送り、または仕入れ額の縮小を推奨")}
+    <div class="small" style="margin-top:6px;line-height:1.9">支払日(${jp(date)})時点の残高見込み:<b>${yen(onDay.bal)}</b><br>
+    60日間の最低残高:<b>${yen(low.bal)}</b>(${jp(low.day)})/仕入れなしの場合 ${yen(base.bal)}<br>
+    ${ok ? "" : `安全ライン(${yen(safety)})を維持できる仕入れ額の目安:<b>${yen(Math.floor(room/1000)*1000)}</b>まで`}</div></div>`;
+  lineChart($("#cash-chart"), after, safety, { date, amount });
+});
+$("#btn-add-pay").addEventListener("click", () => openMoney("pay"));
+$("#btn-add-rec").addEventListener("click", () => openMoney("rec"));
+function openMoney(kind){
+  const pay = kind === "pay";
+  openModal(`<h3>${pay?"支払予定":"入金予定"}を追加</h3>
+    <div class="form">
+      <label>${pay?"支払日":"入金予定日"}<input type="date" id="y-due" value="${addDaysIso(todayIso(), 7)}"></label>
+      <label>金額(円)<input type="number" id="y-amount" step="1000" inputmode="numeric"></label>
+      <label>${pay?"支払先":"入金元"}<input type="text" id="y-who" placeholder="${pay?"例:部品商B商会":"例:輸出業者D社"}"></label>
+      <label>内容<input type="text" id="y-desc" placeholder="例:液晶パネル 10枚"></label>
+    </div><div class="err" id="y-err"></div>
+    <div class="actions"><button class="btn" data-close>キャンセル</button><button class="btn primary" id="y-save">追加</button></div>`);
+  $("#y-save").addEventListener("click", async () => { if (await run("addMoney", { kind, due:$("#y-due").value, amount:$("#y-amount").value, who:$("#y-who").value, desc:$("#y-desc").value }, "追加しました")) closeModal(); });
+}
+
+/* ================= 売上と利益 ================= */
+function monthKeys(n){ const out = [], d = new Date(); d.setDate(1); for (let k = n-1; k >= 0; k--){ const x = new Date(d.getFullYear(), d.getMonth()-k, 1); out.push(isoDate(x).slice(0,7)); } return out; }
+function renderReport(){
+  const sold = soldItems();
+  const months = monthKeys(6).map(k => { const it = sold.filter(i => i.soldDate.startsWith(k)); const sales = it.reduce((a,i)=>a+i.soldPrice,0), cost = it.reduce((a,i)=>a+costOf(i),0); return { k, n:it.length, sales, cost, gross:sales-cost }; });
+  const tS = months.reduce((a,m)=>a+m.sales,0), tG = months.reduce((a,m)=>a+m.gross,0), st = stockItems(), stale = st.filter(isStale);
+  $("#rep-tiles").innerHTML = [
+    `<div class="card tile"><div class="label">直近6か月の売上</div><div class="value">${yen(tS)}</div><div class="sub">${months.reduce((a,m)=>a+m.n,0)}台</div></div>`,
+    `<div class="card tile"><div class="label">直近6か月の粗利</div><div class="value">${yen(tG)}</div><div class="sub">粗利率 ${tS ? Math.round(tG/tS*100) : 0}%</div></div>`,
+    `<div class="card tile"><div class="label">在庫金額(原価)</div><div class="value">${yen(st.reduce((a,i)=>a+costOf(i),0))}</div><div class="sub">${st.length}台</div></div>`,
+    `<div class="card tile"><div class="label">滞留在庫(60日以上)</div><div class="value">${stale.length}台</div><div class="sub">原価 ${yen(stale.reduce((a,i)=>a+costOf(i),0))}</div></div>`,
+  ].join("");
+  barChart($("#month-chart"), months);
+  $("#month-table").innerHTML = `<thead><tr><th>月</th><th class="num">販売台数</th><th class="num">売上</th><th class="num">原価</th><th class="num">粗利</th><th class="num">粗利率</th></tr></thead><tbody>` +
+    months.map(m => `<tr><td>${m.k.replace("-","年")}月</td><td class="num">${m.n}</td><td class="num">${yen(m.sales)}</td><td class="num">${yen(m.cost)}</td><td class="num">${yen(m.gross)}</td><td class="num">${m.sales?Math.round(m.gross/m.sales*100)+"%":"-"}</td></tr>`).join("") + `</tbody>`;
+  $("#channel-table").innerHTML = `<thead><tr><th>販売先</th><th class="num">台数</th><th class="num">売上</th><th class="num">粗利</th><th class="num">入金までの日数</th></tr></thead><tbody>` +
+    CHANNELS.map(c => { const it = sold.filter(i => i.channel === c), s = it.reduce((a,i)=>a+i.soldPrice,0), g = it.reduce((a,i)=>a+i.soldPrice-costOf(i),0);
+      const lag = it.length ? Math.round(it.reduce((a,i)=>a+(i.payDue?daysBetween(i.soldDate, i.payDue):0),0)/it.length) : 0;
+      return `<tr><td>${c}</td><td class="num">${it.length}</td><td class="num">${yen(s)}</td><td class="num">${yen(g)}</td><td class="num">平均 ${lag}日</td></tr>`; }).join("") + `</tbody>`;
+  $("#stale-table").innerHTML = stale.length ? `<thead><tr><th>台帳番号</th><th>機種</th><th class="num">在庫日数</th><th class="num">原価</th></tr></thead><tbody>` +
+    stale.map(i => `<tr><td>${esc(i.ledgerNo)}</td><td>${esc(i.model)}</td><td class="num">${ageOf(i)}日</td><td class="num">${yen(costOf(i))}</td></tr>`).join("") + `</tbody>` : `<tbody><tr><td class="muted">滞留在庫はありません</td></tr></tbody>`;
+}
+
+/* ================= メンバー ================= */
+async function renderMembers(){
+  let list = [];
+  try { list = await Backend.members("list"); } catch(e){ toast(e.message, true); }
+  $("#member-table").innerHTML = `<thead><tr><th>ID</th><th>名前</th><th>役割</th><th>状態</th><th></th></tr></thead><tbody>` +
+    list.map(m => `<tr><td>${esc(m.id)}</td><td>${esc(m.name)}</td><td>${m.role === "admin" ? "管理者" : "メンバー"}</td><td>${m.active ? '<span class="flag ok">✓ 有効</span>' : '<span class="flag crit">× 停止中</span>'}</td>
+      <td style="white-space:nowrap">${IS_GAS ? `<button class="btn small" data-pw="${esc(m.id)}">パスワード変更</button> ${m.id !== ME.id ? `<button class="btn small" data-toggle="${esc(m.id)}">${m.active ? "停止" : "再開"}</button>` : ""}` : ""}</td></tr>`).join("") + `</tbody>`;
+  $("#member-note").textContent = IS_GAS ? "退任したメンバーは「停止」でログイン不可になります(記録は残ります)。" : "この環境ではメンバーの追加・変更はできません。";
+  $("#btn-add-member").classList.toggle("hidden", !IS_GAS);
+  $$("[data-pw]").forEach(b => b.addEventListener("click", async () => { const pw = prompt("新しいパスワード(8文字以上)"); if (!pw) return; try { await Backend.members("password", { id:b.dataset.pw, pw }); toast("変更しました"); } catch(e){ toast(e.message, true); } }));
+  $$("[data-toggle]").forEach(b => b.addEventListener("click", async () => { try { await Backend.members("toggle", { id:b.dataset.toggle }); renderMembers(); } catch(e){ toast(e.message, true); } }));
+}
+$("#btn-add-member").addEventListener("click", () => {
+  openModal(`<h3>メンバーを追加</h3>
+    <div class="form">
+      <label>ログインID(半角英数字3〜20文字)<input type="text" id="n-id"></label>
+      <label>表示名<input type="text" id="n-name" placeholder="例:田中"></label>
+      <label>最初のパスワード(8文字以上)<input type="text" id="n-pw"></label>
+      <label>役割<select id="n-role"><option value="member">メンバー(在庫のみ)</option><option value="admin">管理者(全機能)</option></select></label>
+    </div><div class="err" id="n-err"></div>
+    <p class="small muted">IDとパスワードは本人に直接伝えてください。</p>
+    <div class="actions"><button class="btn" data-close>キャンセル</button><button class="btn primary" id="n-save">追加</button></div>`);
+  $("#n-save").addEventListener("click", async () => {
+    try { await Backend.members("add", { id:$("#n-id").value.trim(), name:$("#n-name").value.trim(), pw:$("#n-pw").value, role:$("#n-role").value }); closeModal(); toast("追加しました"); renderMembers(); }
+    catch(e){ $("#n-err").textContent = e.message; }
+  });
+});
+
+/* ================= グラフ(SVG) ================= */
+function niceMax(v){ if (v <= 0) return 1; const p = Math.pow(10, Math.floor(Math.log10(v))), n = v / p; return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * p; }
+function tipAt(box, tip, x, y, html){ tip.innerHTML = html; tip.style.display = "block"; tip.style.left = Math.min(Math.max(0, x + 12), box.clientWidth - tip.offsetWidth) + "px"; tip.style.top = Math.max(0, y - 44) + "px"; }
+function lineChart(box, rows, safety, extra){
+  const W = 900, H = 280, L = 72, R = 20, Tp = 22, B = 34;
+  const vals = rows.map(r => r.bal).concat([safety]), lo = Math.min(0, ...vals), hi = niceMax(Math.max(...vals) * 1.1);
+  const x = k => L + (W - L - R) * k / (rows.length - 1), y = v => Tp + (H - Tp - B) * (1 - (v - lo) / (hi - lo));
+  let g = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="60日間の残高推移の予測"><g class="grid">`;
+  for (let k = 0; k <= 4; k++) g += `<line x1="${L}" x2="${W-R}" y1="${y(lo+(hi-lo)*k/4)}" y2="${y(lo+(hi-lo)*k/4)}"/>`;
+  g += `</g><g class="axis">`; for (let k = 0; k <= 4; k++){ const v = lo + (hi - lo) * k / 4; g += `<text x="${L-8}" y="${y(v)+4}" text-anchor="end">${man(v)}</text>`; }
+  rows.forEach((r, k) => { if (k % 10 === 0) g += `<text x="${x(k)}" y="${H-10}" text-anchor="middle">${md(r.day)}</text>`; }); g += `</g>`;
+  g += `<line x1="${L}" x2="${W-R}" y1="${y(safety)}" y2="${y(safety)}" stroke="var(--critical)" stroke-width="2" stroke-dasharray="6 5"/><text x="${W-R}" y="${y(safety)-6}" text-anchor="end" fill="var(--critical-text)" font-size="12">安全ライン ${man(safety)}</text>`;
+  let d = `M${x(0)},${y(rows[0].bal)}`; rows.forEach((r, k) => { if (k) d += ` L${x(k)},${y(rows[k-1].bal)} L${x(k)},${y(r.bal)}`; });
+  g += `<path d="${d}" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-linejoin="round"/>`;
+  rows.forEach((r, k) => { if (r.bal < safety && (r.outSum || k === 0)) g += `<circle cx="${x(k)}" cy="${y(r.bal)}" r="5" fill="var(--critical)" stroke="var(--surface)" stroke-width="2"/>`; });
+  if (extra){ const k = rows.findIndex(r => r.day === extra.date); if (k >= 0) g += `<line x1="${x(k)}" x2="${x(k)}" y1="${Tp}" y2="${H-B}" stroke="var(--text-2)" stroke-dasharray="2 3"/><text x="${x(k)}" y="${Tp-6}" text-anchor="middle" font-size="12" fill="var(--text-2)">仕入れ(試算) ${man(extra.amount)}</text>`; }
+  g += `<line class="cross" x1="0" x2="0" y1="${Tp}" y2="${H-B}" stroke="var(--text-2)" visibility="hidden"/><circle class="dot" r="5" fill="var(--series-1)" stroke="var(--surface)" stroke-width="2" visibility="hidden"/>`;
+  g += `<rect x="${L}" y="${Tp}" width="${W-L-R}" height="${H-Tp-B}" fill="transparent" class="hit"/></svg><div class="tip"></div>`;
+  box.innerHTML = g;
+  const svg = $("svg", box), tip = $(".tip", box), cross = $(".cross", box), dot = $(".dot", box), hit = $(".hit", box);
+  const move = e => { const pt = e.touches ? e.touches[0] : e, rc = svg.getBoundingClientRect(), sx = (pt.clientX - rc.left) * W / rc.width;
+    const k = Math.max(0, Math.min(rows.length-1, Math.round((sx - L) / (W - L - R) * (rows.length-1)))), r = rows[k];
+    cross.setAttribute("x1", x(k)); cross.setAttribute("x2", x(k)); cross.setAttribute("visibility", "visible"); dot.setAttribute("cx", x(k)); dot.setAttribute("cy", y(r.bal)); dot.setAttribute("visibility", "visible");
+    const det = [...r.inT.map(i => `＋${esc(i.from)} ${yen(i.amount)}`), ...r.outT.map(o => `－${esc(o.to)} ${yen(o.amount)}`)].join("<br>");
+    tipAt(box, tip, x(k) * rc.width / W, y(r.bal) * rc.height / H, `${jp(r.day)}<br>残高見込み <b>${yen(r.bal)}</b>${det ? "<br><span class='muted'>" + det + "</span>" : ""}`); };
+  hit.addEventListener("mousemove", move); hit.addEventListener("touchstart", move, { passive:true }); hit.addEventListener("touchmove", move, { passive:true });
+  hit.addEventListener("mouseleave", () => { tip.style.display = "none"; cross.setAttribute("visibility", "hidden"); dot.setAttribute("visibility", "hidden"); });
+}
+function barChart(box, months){
+  const W = 900, H = 280, L = 72, R = 20, Tp = 22, B = 34;
+  const hi = niceMax(Math.max(1, ...months.map(m => m.sales)) * 1.1), lo = Math.min(0, ...months.map(m => m.gross));
+  const y = v => Tp + (H - Tp - B) * (1 - (v - lo) / (hi - lo)), slot = (W - L - R) / months.length, bw = Math.min(46, slot * 0.3);
+  const bar = (cx, v, color) => { const top = y(Math.max(v, 0)), base = y(0), r = Math.min(4, Math.max(0, base - top)); return `<path d="M${cx},${base} V${top+r} Q${cx},${top} ${cx+r},${top} H${cx+bw-r} Q${cx+bw},${top} ${cx+bw},${top+r} V${base} Z" fill="${color}"/>`; };
+  let g = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="月次の売上と粗利"><g class="grid">`;
+  for (let k = 0; k <= 4; k++) g += `<line x1="${L}" x2="${W-R}" y1="${y(lo+(hi-lo)*k/4)}" y2="${y(lo+(hi-lo)*k/4)}"/>`;
+  g += `</g><g class="axis">`; for (let k = 0; k <= 4; k++){ const v = lo + (hi - lo) * k / 4; g += `<text x="${L-8}" y="${y(v)+4}" text-anchor="end">${man(v)}</text>`; }
+  months.forEach((m, k) => g += `<text x="${L + slot*k + slot/2}" y="${H-10}" text-anchor="middle">${Number(m.k.slice(5))}月</text>`); g += `</g>`;
+  months.forEach((m, k) => { const c = L + slot*k + slot/2; g += bar(c - bw - 1, m.sales, "var(--series-1)") + bar(c + 1, m.gross, "var(--series-2)") + `<rect x="${L+slot*k}" y="${Tp}" width="${slot}" height="${H-Tp-B}" fill="transparent" data-k="${k}" class="hit"/>`; });
+  const last = months[months.length-1], lc = L + slot*(months.length-1) + slot/2;
+  if (last.sales) g += `<text x="${lc - bw/2 - 1}" y="${y(last.sales)-6}" text-anchor="middle" font-size="12" fill="var(--text-2)">${man(last.sales)}</text>`;
+  box.innerHTML = g + `</svg><div class="tip"></div>`;
+  const svg = $("svg", box), tip = $(".tip", box);
+  $$(".hit", box).forEach(h => { const show = e => { const pt = e.touches ? e.touches[0] : e, m = months[h.dataset.k], rc = svg.getBoundingClientRect();
+      tipAt(box, tip, pt.clientX - rc.left, pt.clientY - rc.top, `${m.k.replace("-","年")}月(${m.n}台)<br>売上 <b>${yen(m.sales)}</b><br>粗利 <b>${yen(m.gross)}</b>`); };
+    h.addEventListener("mousemove", show); h.addEventListener("touchstart", show, { passive:true }); h.addEventListener("mouseleave", () => tip.style.display = "none"); });
+}
+
+/* ================= モーダル・起動 ================= */
+function openModal(html){ $("#modal").innerHTML = html; $("#modal-bg").classList.add("open"); $$("[data-close]", $("#modal")).forEach(b => b.addEventListener("click", closeModal)); }
+function closeModal(){ $("#modal-bg").classList.remove("open"); }
+$("#modal-bg").addEventListener("click", e => { if (e.target.id === "modal-bg") closeModal(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeModal(); });
+function renderAll(){
+  if (!ME || !S) return;
+  renderStock();
+  if (isAdmin()){ renderHome(); renderLedger(); renderCash(); renderReport(); }
+}
+(async function start(){
+  if (!IS_GAS){
+    loadDemo();
+    try { const id = sessionStorage.getItem("tm-demo-me"); if (id) return enter(await Backend.login(id, "demo1234")); } catch(e){}
+    return showLogin();
+  }
+  busy(true);
+  try {
+    const st = await Backend.setupStatus(); busy(false);
+    if (st.needsAdmin) return showOnly("setup");
+    try { TOKEN = sessionStorage.getItem("tm-token"); const me = JSON.parse(sessionStorage.getItem("tm-me") || "null"); if (TOKEN && me) return enter(me); } catch(e){}
+    showLogin();
+  } catch(e){ busy(false); toast("準備ができていません:" + e.message, true); showLogin(); }
+})();
+</script>
+</body>
+</html>
