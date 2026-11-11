@@ -1,0 +1,37 @@
+// 業務ルール(src/logic.js)のテスト。実行: node test/logic_test.js
+const fs=require('fs');eval(fs.readFileSync(require('path').join(__dirname,'..','src','logic.js'),'utf8'));
+const ctx={today:'2026-11-11',stamp:'2026-11-11 10:00'};
+const admin={name:'上村',role:'admin'},mem={name:'staff',role:'member'};
+let S={settings:{balance:1000000,safety:300000},ledger:[],items:[],payables:[],receivables:[],log:[]};
+let ok=0,ng=0;const chk=(label,cond)=>{console.log((cond?'OK ':'NG ')+label);cond?ok++:ng++;};
+const r=(m,n,p)=>applyAction(S,m,n,p,ctx);
+const base={date:'2026-11-01',model:'iPhone',storage:'128GB',price:30000,addr:'a',name:'b',job:'c',age:30};
+chk('通常の買取登録',r(admin,'buy',base)===null);
+const id=S.items[0].id;
+chk('6.検品待ち→売約済みを拒否',/変更できません/.test(r(mem,'updateItem',{id,status:'売約済み',channel:'フリマアプリ',soldPrice:50000,payDue:'2026-11-20'})));
+chk('通常の流れ:検品完了',r(mem,'nextStep',{id})===null);
+chk('通常の流れ:出品',r(mem,'nextStep',{id})===null);
+chk('通常の流れ:販売登録',r(mem,'updateItem',{id,status:'売約済み',channel:'フリマアプリ',soldPrice:50000,payDue:'2026-11-20'})===null);
+chk('メンバーは入金確認できない',/管理者のみ/.test(r(mem,'nextStep',{id})));
+chk('管理者の入金確認',r(admin,'recDone',{id:'item:'+id})===null && S.settings.balance===1020000);
+chk('4.入金済みの販売額変更を拒否',/変更できません/.test(r(mem,'updateItem',{id,soldPrice:1})) && S.items[0].soldPrice===50000 && S.ledger[0].out.price===50000);
+chk('4.管理者でも入金済みの販売額は変えられない',/変更できません/.test(r(admin,'updateItem',{id,soldPrice:1})));
+chk('3.入金済み→売約済みを拒否',/変更できません/.test(r(mem,'updateItem',{id,status:'売約済み'})));
+chk('3.残高は102万円のまま',S.settings.balance===1020000);
+chk('入金済みでもメモは書ける',r(mem,'updateItem',{id,memo:'梱包済み',soldPrice:'50000',channel:'フリマアプリ',payDue:'2026-11-20',listPrice:''})===null);
+// 売約の取り消し
+r(admin,'buy',base);const id2=S.items[1].id;r(mem,'nextStep',{id:id2});r(mem,'nextStep',{id:id2});
+r(mem,'updateItem',{id:id2,status:'売約済み',channel:'輸出業者',soldPrice:40000,payDue:'2026-11-30'});
+chk('売約の取り消しで払出し欄が消える',r(mem,'updateItem',{id:id2,status:'出品中'})===null && S.ledger[1].out===null && S.items[1].soldPrice===null);
+chk('7.日付abcdを拒否',/形式/.test(r(admin,'buy',{...base,date:'abcd'})));
+chk('7.未来の日付を拒否',/未来/.test(r(admin,'buy',{...base,date:'2027-01-01'})));
+chk('7.存在しない日付を拒否',/形式/.test(r(admin,'buy',{...base,date:'2026-02-30'})));
+chk('7.区分の選択肢外を拒否',/確認の区分/.test(r(admin,'buy',{...base,ck:'なんとなく'})));
+chk('マイナスの販売額を拒否',/1円以上/.test(r(mem,'updateItem',{id:id2,status:'売約済み',channel:'輸出業者',soldPrice:-100,payDue:'2026-11-30'})));
+chk('販売先の選択肢外を拒否',/販売先/.test(r(mem,'updateItem',{id:id2,channel:'<script>'})));
+chk('長すぎるメモを拒否(セル上限対策)',/長すぎ/.test(r(mem,'updateItem',{id:id2,memo:'あ'.repeat(60000)})));
+S.log=Array(300).fill({at:'',by:'',text:''});S.newLog=[];r(admin,'saveSettings',{balance:1020000,safety:300000});
+chk('5.300件あってもログが保存対象に入る',S.newLog.length===1 && /→/.test(S.newLog[0].text));
+const v=viewFor(S,mem);chk('メンバーには台帳・残高・原価を渡さない',v.ledger.length===0 && !('balance' in v.settings) && v.items.every(i=>i.cost===null));
+process.exitCode = ng ? 1 : 0;
+console.log(`\n${ok}件OK / ${ng}件NG`);

@@ -440,7 +440,7 @@ const Backend = IS_GAS ? {
   async login(id, pw){ const m = DEMO_MEMBERS.find(x => x.id === id && x.pw === pw); if (!m) throw new Error("IDまたはパスワードが違います"); try { sessionStorage.setItem("tm-demo-me", m.id); } catch(e){} return { id:m.id, name:m.name, role:m.role }; },
   async logout(){ try { sessionStorage.removeItem("tm-demo-me"); } catch(e){} },
   async getAll(){ return JSON.parse(JSON.stringify(viewFor(DEMO_STATE, ME))); },
-  async act(name, p){ const err = applyAction(DEMO_STATE, ME, name, JSON.parse(JSON.stringify(p || {})), localCtx()); if (err) throw new Error(err); saveDemo(); return this.getAll(); },
+  async act(name, p){ const err = applyAction(DEMO_STATE, ME, name, JSON.parse(JSON.stringify(p || {})), localCtx()); delete DEMO_STATE.newLog; if (err) throw new Error(err); saveDemo(); return this.getAll(); },
   async members(){ return DEMO_MEMBERS.map(m => ({ id:m.id, name:m.name, role:m.role, active:m.active })); },
 };
 function loadDemo(){ try { const raw = localStorage.getItem(STORE_KEY); if (raw){ DEMO_STATE = JSON.parse(raw); return; } } catch(e){} DEMO_STATE = buildDemo(); }
@@ -609,7 +609,7 @@ function openItem(id){
   const i = S.items.find(x => x.id === id);
   openModal(`<h3>${esc(i.model)}(${esc(i.ledgerNo)})</h3>
     <div class="form">
-      <label>状態<select id="m-status">${STATUSES.map(s => `<option ${s===i.status?"selected":""} ${s==="入金済み"&&!isAdmin()&&i.status!=="入金済み"?"disabled":""}>${s}</option>`).join("")}</select></label>
+      <label>状態<select id="m-status">${[i.status].concat(TRANSITIONS[i.status] || []).map(s => `<option ${s===i.status?"selected":""} ${s==="入金済み"&&!isAdmin()&&i.status!=="入金済み"?"disabled":""}>${s}</option>`).join("")}</select></label>
       <label>販売先<select id="m-channel"><option value="">-</option>${CHANNELS.map(s => `<option ${s===i.channel?"selected":""}>${s}</option>`).join("")}</select></label>
       <label>出品価格(円)<input type="number" id="m-list" value="${i.listPrice ?? ""}" step="100" inputmode="numeric"></label>
       ${isAdmin()?`<label>部品代(円)<input type="number" id="m-parts" value="${i.partsCost ?? 0}" step="100" inputmode="numeric"></label>`:"<span></span>"}
@@ -710,7 +710,7 @@ $("#btn-buy").addEventListener("click", openBuy);
 $("#btn-print").addEventListener("click", () => { $("#print-date").textContent = jp(todayIso()); document.body.classList.add("print-ledger"); window.print(); setTimeout(() => document.body.classList.remove("print-ledger"), 500); });
 $("#btn-csv").addEventListener("click", () => {
   const head = ["台帳番号","取引年月日","区別","品目","数量","特徴","代価","相手方住所","相手方氏名","職業","年齢","確認の区分","確認の方法","払出し年月日","払出し区別","払出し代価","払出し相手方","訂正件数"];
-  const q = s => `"${String(s ?? "").replaceAll('"','""')}"`;
+  const q = s => { let t = String(s ?? ""); if (/^[=+\-@\t\r]/.test(t)) t = "'" + t; return `"${t.replaceAll('"','""')}"`; };
   const lines = [head.map(q).join(",")].concat(S.ledger.map(l => [l.no,l.date,l.kubun,l.hinmoku,l.qty,l.tokucho,l.price,l.partner.addr,l.partner.name,l.partner.job,l.partner.age,l.check.kubun,l.check.method,l.out?.date,l.out?.kubun,l.out?.price,l.out?.partnerType,l.corrections.length].map(q).join(",")));
   const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["﻿" + lines.join("\r\n")], { type:"text/csv" }));
   a.download = `古物台帳_${todayIso()}.csv`; document.body.appendChild(a); a.click(); a.remove();

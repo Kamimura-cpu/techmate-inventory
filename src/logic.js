@@ -9,6 +9,19 @@ var CHECK_METHOD = ["運転免許証","マイナンバーカード","パスポ�
 var ACTIVE_STATUSES = ["検品待ち","修理・整備中","出品中"];
 var SOLD_STATUSES = ["売約済み","入金済み"];
 // ボタン1つで進める「次の段階」
+/* 状態の移り変わりは、この表にある組み合わせだけを許可する(入金済みは最後の状態で、戻せない) */
+var TRANSITIONS = {
+  "検品待ち":     ["修理・整備中","部品取り"],
+  "修理・整備中": ["出品中","部品取り","検品待ち"],
+  "出品中":       ["売約済み","修理・整備中"],
+  "売約済み":     ["入金済み","出品中"],
+  "入金済み":     [],
+  "部品取り":     ["修理・整備中"],
+};
+var TYPES = ["スマートフォン","タブレット","ノートパソコン"];
+var KUBUN = ["買受け","委託"];
+var GRADES = ["S","A","B","C"];
+var MAX_TEXT = 1000; // 1つの入力欄に入れられる文字数の上限(スプレッドシートの1セル上限 50,000字より十分小さく)
 var NEXT_STEP = {
   "検品待ち":     { to:"修理・整備中", label:"検品完了" },
   "修理・整備中": { to:"出品中",       label:"出品済みにする" },
@@ -23,6 +36,8 @@ function addDaysIso(s, n){ var d = parseDate(s); d.setDate(d.getDate()+n); retur
 function daysBetween(a, b){ return Math.round((parseDate(b) - parseDate(a)) / 86400000); }
 function yenText(n){ return "¥" + Math.round(Number(n)||0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
 function str(v){ return v === null || v === undefined ? "" : String(v).trim(); }
+function isDateStr(s){ if (!/^\d{4}-\d{2}-\d{2}$/.test(String(s))) return false; return isoDate(parseDate(s)) === String(s); }
+function isMoney(n){ return typeof n === "number" && isFinite(n) && n === Math.floor(n); }
 function numOrNull(v){ if (v === "" || v === null || v === undefined) return null; var n = Number(v); return isNaN(n) ? null : n; }
 
 function nextLedgerNo(S, date){
@@ -36,9 +51,10 @@ function nextLedgerNo(S, date){
 /* 在庫の状態を変えるときの共通処理(台帳の払出し欄・残高も連動させる) */
 function changeItem(S, me, ctx, item, p){
   var isAdmin = me.role === "admin";
-  var to = p.status !== undefined ? p.status : item.status, from = item.status;
+  var to = (p.status !== undefined && p.status !== "") ? str(p.status) : item.status, from = item.status;
   if (STATUSES.indexOf(to) < 0) return "状態の指定が正しくありません";
-  if (to === "入金済み" && !isAdmin && from !== "入金済み") return "入金確認は管理者のみ実行できます";
+  if (to !== from && TRANSITIONS[from].indexOf(to) < 0) return "「" + from + "」から「" + to + "」には変更できません";
+  if (to === "入金済み" && from !== "入金済み" && !isAdmin) return "入金確認は管理者のみ実行できます";
   var next = {
     channel:   p.channel   !== undefined ? str(p.channel) : item.channel,
     listPrice: p.listPrice !== undefined ? numOrNull(p.listPrice) : item.listPrice,
@@ -46,14 +62,34 @@ function changeItem(S, me, ctx, item, p){
     payDue:    p.payDue    !== undefined ? str(p.payDue) : item.payDue,
     memo:      p.memo      !== undefined ? str(p.memo) : item.memo,
   };
+  // 入金済みの在庫は、残高と台帳に反映済みなので、金額・販売先・日付は誰も変えられない(メモと部品代だけ)
+  if (from === "入金済み"){
+    if (next.channel !== item.channel || next.listPrice !== item.listPrice || next.soldPrice !== item.soldPrice || next.payDue !== item.payDue)
+      return "入金済みの在庫は、販売額・販売先・入金予定日を変更できません";
+  }
+  if (next.channel && CHANNELS.indexOf(next.channel) < 0) return "販売先の指定が正しくありません";
+  if (next.listPrice !== null && !(isMoney(next.listPrice) && next.listPrice >= 0)) return "出品価格は0以上の整数で入力してください";
+  if (next.soldPrice !== null && !(isMoney(next.soldPrice) && next.soldPrice > 0)) return "販売額は1円以上の整数で入力してください";
+  if (next.payDue && !isDateStr(next.payDue)) return "入金予定日の形式が正しくありません";
   if (to === "売約済み" && (!next.channel || !next.soldPrice || !next.payDue)) return "販売登録には、販売先・販売額・入金予定日が必要です";
-  item.channel = next.channel; item.listPrice = next.listPrice; item.soldPrice = next.soldPrice;
-  item.payDue = next.payDue; item.memo = next.memo;
-  if (isAdmin && p.partsCost !== undefined) item.partsCost = numOrNull(p.partsCost) || 0;
-  if (SOLD_STATUSES.indexOf(to) >= 0){
-    if (!item.soldDate) item.soldDate = ctx.today;
-    var l = findLedger(S, item.ledgerNo);
-    if (l) l.out = { date:item.soldDate, kubun:"売却", price:item.soldPrice, partnerType:item.channel };
+  var partsCost = item.partsCost;
+  if (isAdmin && p.partsCost !== undefined){
+    partsCost = numOrNull(p.partsCost) || 0;
+    if (!(isMoney(partsCost) && partsCost >= 0)) return "部品代は0以上の整数で入力してください";
+  }
+  // ここから先は書き込み(チェックはすべて上で終えている)
+  item.channel = next.channel; item.listPrice = next.listPrice; item.memo = next.memo; item.partsCost = partsCost;
+  var l = findLedger(S, item.ledgerNo);
+  if (from === "売約済み" && to === "出品中"){
+    // 売約の取り消し:販売の情報と台帳の払出し欄を消す
+    item.soldPrice = null; item.soldDate = ""; item.payDue = "";
+    if (l) l.out = null;
+  } else {
+    item.soldPrice = next.soldPrice; item.payDue = next.payDue;
+    if (SOLD_STATUSES.indexOf(to) >= 0){
+      if (!item.soldDate) item.soldDate = ctx.today;
+      if (l) l.out = { date:item.soldDate, kubun:"売却", price:item.soldPrice, partnerType:item.channel };
+    }
   }
   if (to === "入金済み" && from === "売約済み") S.settings.balance += Number(item.soldPrice) || 0;
   if (to !== from){
@@ -64,21 +100,35 @@ function changeItem(S, me, ctx, item, p){
 }
 function findLedger(S, no){ for (var i = 0; i < S.ledger.length; i++) if (S.ledger[i].no === no) return S.ledger[i]; return null; }
 function findById(list, id){ for (var i = 0; i < list.length; i++) if (String(list[i].id) === String(id)) return list[i]; return null; }
-function addLog(S, ctx, me, text){ S.log.unshift({ at:ctx.stamp, by:me.name, text:text }); if (S.log.length > 300) S.log.length = 300; }
+function addLog(S, ctx, me, text){
+  var e = { at:ctx.stamp, by:me.name, text:text };
+  S.log.unshift(e); if (S.log.length > 300) S.log.length = 300;   // 画面に出す分
+  (S.newLog = S.newLog || []).push(e);                              // 保存する分(件数で切らない)
+}
 
 /* すべての書き込みはここを通る。戻り値:エラー文(成功なら null) */
 function applyAction(S, me, name, p, ctx){
   var isAdmin = me.role === "admin";
   var adminOnly = ["buy","fixLedger","payDone","recDone","addMoney","removeMoney","saveSettings"];
   if (adminOnly.indexOf(name) >= 0 && !isAdmin) return "この操作は管理者のみ実行できます";
-  p = p || {};
+  if (!p || typeof p !== "object") p = {};
+  for (var key in p){
+    if (typeof p[key] === "string" && p[key].length > MAX_TEXT) return "入力が長すぎます(" + MAX_TEXT + "文字まで)";
+  }
 
   if (name === "buy"){
     var need = { date:"取引年月日", model:"メーカー・機種", storage:"容量", price:"代価(買取額)", addr:"相手方の住所", name:"相手方の氏名", job:"相手方の職業", age:"相手方の年齢" };
     for (var k in need) if (!str(p[k])) return need[k] + "を入力してください";
     var price = Number(p.price), age = Number(p.age);
-    if (!(price > 0)) return "代価は1円以上で入力してください";
-    if (!(age >= 0 && age < 130)) return "年齢を正しく入力してください";
+    if (!isDateStr(str(p.date))) return "取引年月日の形式が正しくありません";
+    if (str(p.date) > ctx.today) return "取引年月日に未来の日付は入れられません";
+    if (p.kubun && KUBUN.indexOf(str(p.kubun)) < 0) return "区別の指定が正しくありません";
+    if (p.type && TYPES.indexOf(str(p.type)) < 0) return "品目の指定が正しくありません";
+    if (p.grade && GRADES.indexOf(str(p.grade)) < 0) return "外装ランクの指定が正しくありません";
+    if (p.ck && CHECK_KUBUN.indexOf(str(p.ck)) < 0) return "確認の区分の指定が正しくありません";
+    if (p.cm && CHECK_METHOD.indexOf(str(p.cm)) < 0) return "確認の方法の指定が正しくありません";
+    if (!(isMoney(price) && price > 0)) return "代価は1円以上の整数で入力してください";
+    if (!(isMoney(age) && age >= 0 && age < 130)) return "年齢を正しく入力してください";
     var no = nextLedgerNo(S, str(p.date));
     var serialTail = str(p.serial);
     var serial = serialTail ? ((p.type === "ノートパソコン" ? "S/N ****" : "IMEI ****") + serialTail) : "番号未記入";
@@ -90,7 +140,7 @@ function applyAction(S, me, name, p, ctx){
     S.items.push({ id:no, ledgerNo:no, type:str(p.type) || "スマートフォン", model:str(p.model), storage:str(p.storage), color:str(p.color),
       grade:str(p.grade), cost:price, partsCost:0, status:"検品待ち", channel:"", listPrice:null, soldPrice:null, soldDate:"", payDue:"", memo:"",
       history:[{ at:ctx.stamp, by:me.name, from:"", to:"検品待ち", note:"買取登録" }] });
-    if (p.paidNow !== false) S.settings.balance -= price;
+    if (p.paidNow !== false && p.paidNow !== "false") S.settings.balance -= price;
     addLog(S, ctx, me, "買取登録 " + no + "(" + yenText(price) + ")");
     return null;
   }
@@ -116,7 +166,8 @@ function applyAction(S, me, name, p, ctx){
     var before = inPartner ? l.partner[key] : l[key];
     if (String(before) === after) return "内容が変わっていません";
     var val = (key === "price" || key === "age") ? Number(after) : after;
-    if ((key === "price" || key === "age") && isNaN(val)) return "数字で入力してください";
+    if (key === "price" && !(isMoney(val) && val > 0)) return "代価は1円以上の整数で入力してください";
+    if (key === "age" && !(isMoney(val) && val >= 0 && val < 130)) return "年齢を正しく入力してください";
     if (inPartner) l.partner[key] = val; else l[key] = val;
     if (key === "price"){ var it = findById(S.items, p.no); if (it) it.cost = val; }
     l.corrections.push({ at:ctx.stamp, by:me.name, field:p.field, before:String(before), after:after, reason:reason });
@@ -147,6 +198,8 @@ function applyAction(S, me, name, p, ctx){
   if (name === "addMoney"){
     var amount = Number(p.amount), due = str(p.due), who = str(p.who);
     if (!due || !(amount > 0) || !who) return "日付・金額・相手先を入力してください";
+    if (!isDateStr(due)) return "日付の形式が正しくありません";
+    if (!isMoney(amount)) return "金額は整数で入力してください";
     var id = (p.kind === "pay" ? "P" : "R") + ctx.stamp.replace(/\D/g, "") + Math.floor(Math.random()*1000);
     if (p.kind === "pay") S.payables.push({ id:id, due:due, to:who, desc:str(p.desc), amount:amount, done:false });
     else S.receivables.push({ id:id, due:due, from:who, desc:str(p.desc), amount:amount, done:false });
@@ -167,8 +220,9 @@ function applyAction(S, me, name, p, ctx){
   if (name === "saveSettings"){
     var b = Number(p.balance), s = Number(p.safety);
     if (isNaN(b) || isNaN(s)) return "数字で入力してください";
+    var oldB = S.settings.balance, oldS = S.settings.safety;
     S.settings.balance = b; S.settings.safety = s;
-    addLog(S, ctx, me, "口座残高・安全ラインを更新");
+    addLog(S, ctx, me, "口座残高 " + yenText(oldB) + "→" + yenText(b) + "、安全ライン " + yenText(oldS) + "→" + yenText(s));
     return null;
   }
   return "不明な操作です";
@@ -178,7 +232,7 @@ function applyAction(S, me, name, p, ctx){
 function viewFor(S, me){
   if (me.role === "admin") return S;
   return {
-    settings:{}, ledger:[], payables:[], receivables:[], log:[],
+    settings:{}, ledger:[], payables:[], receivables:[], log:[], newLog:[],
     items:S.items.map(function(i){
       var c = JSON.parse(JSON.stringify(i)); c.cost = null; c.partsCost = null; return c;
     }),
